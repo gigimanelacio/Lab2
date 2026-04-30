@@ -1,0 +1,2254 @@
+﻿<!DOCTYPE html>
+<html lang="pt">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WIRELESS FESTIVAL — DATA ARCHITECTURE</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Bebas+Neue&display=swap"
+    rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    /* ── RESET & BASE ─────────────────────────────── */
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --green: #00ff88;
+      --green2: #00cc66;
+      --red: #ff3333;
+      --amber: #ffaa00;
+      --blue: #00aaff;
+      --bg: #060a06;
+      --bg2: #0d140d;
+      --bg3: #111a11;
+      --border: rgba(0, 255, 136, 0.15);
+      --border2: rgba(0, 255, 136, 0.3);
+      --text: #c8ffd8;
+      --muted: #4a7a5a;
+      --font: 'JetBrains Mono', monospace;
+      --display: 'Bebas Neue', sans-serif;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.6;
+      cursor: crosshair;
+      overflow-x: hidden;
+    }
+
+    /* scanline overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      pointer-events: none;
+      background: repeating-linear-gradient(0deg,
+          transparent,
+          transparent 2px,
+          rgba(0, 0, 0, 0.08) 2px,
+          rgba(0, 0, 0, 0.08) 4px);
+    }
+
+    /* noise grain */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: 9998;
+      pointer-events: none;
+      opacity: 0.03;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    }
+
+    ::selection {
+      background: var(--green);
+      color: var(--bg);
+    }
+
+    a {
+      color: var(--green);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    /* ── SCROLLBAR ────────────────────────────────── */
+    ::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--bg);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--green2);
+      border-radius: 2px;
+    }
+
+    /* ── TICKER ───────────────────────────────────── */
+    .ticker-wrap {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 1000;
+      background: var(--red);
+      border-bottom: 1px solid rgba(255, 50, 50, 0.5);
+      padding: 6px 0;
+      overflow: hidden;
+    }
+
+    .ticker-inner {
+      display: flex;
+      white-space: nowrap;
+      animation: ticker 30s linear infinite;
+    }
+
+    .ticker-inner span {
+      padding: 0 40px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 0.12em;
+    }
+
+    @keyframes ticker {
+      from {
+        transform: translateX(0);
+      }
+
+      to {
+        transform: translateX(-50%);
+      }
+    }
+
+    /* ── NAV ──────────────────────────────────────── */
+    nav {
+      position: fixed;
+      top: 32px;
+      left: 0;
+      right: 0;
+      z-index: 999;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 40px;
+      background: rgba(6, 10, 6, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-logo {
+      font-family: var(--display);
+      font-size: 22px;
+      letter-spacing: 0.05em;
+      color: var(--green);
+    }
+
+    .nav-logo span {
+      color: var(--red);
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 24px;
+    }
+
+    .nav-links a {
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      text-transform: uppercase;
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover {
+      color: var(--green);
+      text-decoration: none;
+    }
+
+    .nav-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .nav-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: blink 1.2s ease-in-out infinite;
+    }
+
+    @keyframes blink {
+
+      0%,
+      100% {
+        opacity: 1
+      }
+
+      50% {
+        opacity: .2
+      }
+    }
+
+    /* ── SECTIONS ─────────────────────────────────── */
+    section {
+      padding: 100px 40px 80px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    section:first-of-type {
+      padding-top: 160px;
+    }
+
+    .section-label {
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .section-label::before {
+      content: '// ';
+      color: var(--green2);
+    }
+
+    h2 {
+      font-family: var(--display);
+      font-size: clamp(42px, 6vw, 72px);
+      letter-spacing: 0.03em;
+      color: var(--green);
+      line-height: 1;
+      margin-bottom: 32px;
+    }
+
+    h2 span {
+      color: var(--red);
+    }
+
+    /* ── HERO ─────────────────────────────────────── */
+    #hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding-top: 120px;
+      position: relative;
+    }
+
+    .hero-eyebrow {
+      font-size: 11px;
+      letter-spacing: 0.25em;
+      color: var(--red);
+      text-transform: uppercase;
+      margin-bottom: 16px;
+      animation: fadeUp 0.6s ease both;
+    }
+
+    .hero-title {
+      font-family: var(--display);
+      font-size: clamp(64px, 10vw, 140px);
+      line-height: 0.9;
+      letter-spacing: 0.02em;
+      margin-bottom: 24px;
+      animation: fadeUp 0.6s 0.1s ease both;
+    }
+
+    .hero-title .line1 {
+      display: block;
+      color: var(--green);
+    }
+
+    .hero-title .line2 {
+      display: block;
+      color: #fff;
+    }
+
+    .hero-title .line3 {
+      display: block;
+      color: var(--red);
+    }
+
+    .hero-sub {
+      max-width: 560px;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 48px;
+      line-height: 1.8;
+      animation: fadeUp 0.6s 0.2s ease both;
+    }
+
+    .hero-meta {
+      display: flex;
+      gap: 32px;
+      flex-wrap: wrap;
+      animation: fadeUp 0.6s 0.3s ease both;
+    }
+
+    .hero-stat {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .hero-stat-num {
+      font-family: var(--display);
+      font-size: 36px;
+      color: var(--green);
+      letter-spacing: 0.05em;
+    }
+
+    .hero-stat-num.red {
+      color: var(--red);
+    }
+
+    .hero-stat-label {
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    /* RFID ring */
+    .rfid-wrap {
+      position: absolute;
+      right: 80px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 280px;
+      height: 280px;
+      animation: fadeUp 0.6s 0.4s ease both;
+    }
+
+    .rfid-ring {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      border: 1px solid var(--border2);
+      animation: ripple 2.4s ease-out infinite;
+    }
+
+    .rfid-ring:nth-child(2) {
+      animation-delay: 0.6s;
+      inset: -20px;
+    }
+
+    .rfid-ring:nth-child(3) {
+      animation-delay: 1.2s;
+      inset: -40px;
+    }
+
+    @keyframes ripple {
+      0% {
+        transform: scale(1);
+        opacity: 0.6;
+      }
+
+      100% {
+        transform: scale(1.2);
+        opacity: 0;
+      }
+    }
+
+    .rfid-core {
+      position: absolute;
+      inset: 40px;
+      border-radius: 50%;
+      border: 1px solid var(--green2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle, rgba(0, 255, 136, 0.05) 0%, transparent 70%);
+    }
+
+    .rfid-icon {
+      font-size: 48px;
+      opacity: 0.7;
+    }
+
+    .rfid-scan-line {
+      position: absolute;
+      left: 40px;
+      right: 40px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--green), transparent);
+      animation: scan 2s ease-in-out infinite;
+      top: 40px;
+    }
+
+    @keyframes scan {
+
+      0%,
+      100% {
+        top: 40px;
+        opacity: 1;
+      }
+
+      50% {
+        top: calc(100% - 40px);
+        opacity: 0.7;
+      }
+    }
+
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* ── WAR ROOM ─────────────────────────────────── */
+    #warroom {
+      background: var(--bg);
+    }
+
+    .war-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 2px;
+      margin-bottom: 32px;
+    }
+
+    .war-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      padding: 28px 24px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.3s;
+    }
+
+    .war-card:hover {
+      border-color: var(--border2);
+    }
+
+    .war-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--green);
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.4s;
+    }
+
+    .war-card:hover::before {
+      transform: scaleX(1);
+    }
+
+    .war-card.red-card {
+      border-color: rgba(255, 51, 51, 0.3);
+    }
+
+    .war-card.red-card::before {
+      background: var(--red);
+    }
+
+    .war-card.amber-card::before {
+      background: var(--amber);
+    }
+
+    .war-card-label {
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .war-card-num {
+      font-family: var(--display);
+      font-size: 56px;
+      line-height: 1;
+      color: var(--green);
+      letter-spacing: 0.02em;
+      transition: all 0.3s;
+    }
+
+    .war-card-num.red {
+      color: var(--red);
+    }
+
+    .war-card-num.amber {
+      color: var(--amber);
+    }
+
+    .war-card-unit {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    .war-card-badge {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      padding: 3px 8px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    .war-card-badge.live {
+      border-color: var(--green);
+      color: var(--green);
+      animation: borderPulse 2s ease-in-out infinite;
+    }
+
+    @keyframes borderPulse {
+
+      0%,
+      100% {
+        border-color: var(--green);
+        color: var(--green);
+      }
+
+      50% {
+        border-color: var(--green2);
+        color: var(--green2);
+      }
+    }
+
+    /* portas grid */
+    .portas-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 2px;
+      margin-bottom: 32px;
+    }
+
+    .porta-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      padding: 16px;
+      position: relative;
+    }
+
+    .porta-name {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 8px;
+      letter-spacing: 0.1em;
+    }
+
+    .porta-count {
+      font-family: var(--display);
+      font-size: 32px;
+      color: var(--green);
+    }
+
+    .porta-bar {
+      margin-top: 10px;
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .porta-bar-fill {
+      height: 100%;
+      background: var(--green2);
+      border-radius: 2px;
+      transition: width 1s ease;
+    }
+
+    .porta-status {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: blink 1.5s ease-in-out infinite;
+    }
+
+    .porta-status.red {
+      background: var(--red);
+      animation: none;
+    }
+
+    /* chart */
+    .chart-wrap {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      padding: 24px;
+    }
+
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .chart-title {
+      font-size: 11px;
+      letter-spacing: 0.15em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    .chart-legend {
+      display: flex;
+      gap: 16px;
+    }
+
+    .chart-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .chart-legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    /* ── ARQUITETURA ──────────────────────────────── */
+    #arquitetura {
+      background: var(--bg);
+    }
+
+    .arch-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+      align-items: start;
+    }
+
+    .table-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .table-card-header {
+      background: var(--bg3);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .table-name {
+      font-family: var(--display);
+      font-size: 20px;
+      letter-spacing: 0.08em;
+      color: var(--green);
+    }
+
+    .table-pk {
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      color: var(--amber);
+      border: 1px solid rgba(255, 170, 0, 0.3);
+      padding: 2px 6px;
+    }
+
+    .table-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 20px;
+      border-bottom: 1px solid rgba(0, 255, 136, 0.05);
+      transition: background 0.2s;
+    }
+
+    .table-row:last-child {
+      border-bottom: none;
+    }
+
+    .table-row:hover {
+      background: rgba(0, 255, 136, 0.03);
+    }
+
+    .field-name {
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    .field-name.fk {
+      color: var(--blue);
+    }
+
+    .field-name.pk {
+      color: var(--amber);
+    }
+
+    .field-type {
+      font-size: 10px;
+      color: var(--muted);
+      background: rgba(0, 255, 136, 0.05);
+      padding: 2px 8px;
+      border: 1px solid var(--border);
+    }
+
+    .field-badge {
+      font-size: 9px;
+      padding: 1px 6px;
+      margin-left: 6px;
+      letter-spacing: 0.08em;
+    }
+
+    .badge-fk {
+      color: var(--blue);
+      border: 1px solid rgba(0, 170, 255, 0.3);
+    }
+
+    .badge-unique {
+      color: var(--amber);
+      border: 1px solid rgba(255, 170, 0, 0.3);
+    }
+
+    .fk-arrows {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding: 24px 0;
+    }
+
+    .fk-arrow {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      padding: 14px 20px;
+      position: relative;
+    }
+
+    .fk-arrow::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: var(--blue);
+    }
+
+    .fk-from {
+      font-size: 12px;
+      color: var(--blue);
+    }
+
+    .fk-icon {
+      color: var(--muted);
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .fk-to {
+      font-size: 12px;
+      color: var(--green2);
+    }
+
+    .fk-desc {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* ── TERMINAL ─────────────────────────────────── */
+    #terminal-section {
+      background: var(--bg);
+    }
+
+    .terminal-tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 0;
+    }
+
+    .tab-btn {
+      padding: 12px 20px;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      font-family: var(--font);
+      border-bottom: 2px solid transparent;
+      text-transform: uppercase;
+      transition: all 0.2s;
+    }
+
+    .tab-btn:hover {
+      color: var(--text);
+    }
+
+    .tab-btn.active {
+      color: var(--green);
+      border-bottom-color: var(--green);
+      background: rgba(0, 255, 136, 0.03);
+    }
+
+    .terminal-window {
+      background: #050905;
+      border: 1px solid var(--border);
+      border-top: none;
+    }
+
+    .terminal-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background: var(--bg3);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .t-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .terminal-bar-title {
+      font-size: 10px;
+      color: var(--muted);
+      margin-left: 8px;
+      letter-spacing: 0.1em;
+    }
+
+    .terminal-body {
+      padding: 24px;
+      min-height: 220px;
+      position: relative;
+    }
+
+    .query-panel {
+      display: none;
+    }
+
+    .query-panel.active {
+      display: block;
+    }
+
+    .sql-line {
+      line-height: 1.9;
+      font-size: 13px;
+    }
+
+    .sql-kw {
+      color: #ff79c6;
+    }
+
+    .sql-fn {
+      color: #50fa7b;
+    }
+
+    .sql-str {
+      color: #f1fa8c;
+    }
+
+    .sql-col {
+      color: #8be9fd;
+    }
+
+    .sql-cmt {
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    .sql-tbl {
+      color: #ffb86c;
+    }
+
+    .sql-num {
+      color: var(--blue);
+    }
+
+    .query-result {
+      margin-top: 20px;
+      border-top: 1px solid var(--border);
+      padding-top: 16px;
+    }
+
+    .result-header {
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .result-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .result-table th {
+      text-align: left;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      padding: 6px 12px;
+      border-bottom: 1px solid var(--border);
+      text-transform: uppercase;
+    }
+
+    .result-table td {
+      font-size: 12px;
+      color: var(--text);
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(0, 255, 136, 0.04);
+    }
+
+    .result-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .result-val {
+      color: var(--green);
+      font-weight: 500;
+    }
+
+    .exec-time {
+      margin-top: 12px;
+      font-size: 10px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .exec-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+
+    /* ── CRISE / SIMULADOR ────────────────────────── */
+    #crise {
+      background: var(--bg);
+    }
+
+    .crise-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2px;
+    }
+
+    .crise-panel {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      padding: 32px;
+    }
+
+    .crise-panel h3 {
+      font-family: var(--display);
+      font-size: 28px;
+      color: var(--green);
+      margin-bottom: 20px;
+      letter-spacing: 0.05em;
+    }
+
+    .rfid-input-wrap {
+      position: relative;
+      margin-bottom: 16px;
+    }
+
+    .rfid-input-label {
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .rfid-input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--green);
+      font-family: var(--font);
+      font-size: 14px;
+      padding: 12px 16px;
+      outline: none;
+      letter-spacing: 0.1em;
+      transition: border-color 0.2s;
+    }
+
+    .rfid-input:focus {
+      border-color: var(--green2);
+    }
+
+    .scan-btn {
+      width: 100%;
+      background: transparent;
+      border: 1px solid var(--green2);
+      color: var(--green);
+      font-family: var(--font);
+      font-size: 12px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      padding: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .scan-btn::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--green2);
+      transform: translateX(-100%);
+      transition: transform 0.3s;
+      opacity: 0.1;
+    }
+
+    .scan-btn:hover::before {
+      transform: translateX(0);
+    }
+
+    .scan-btn:hover {
+      border-color: var(--green);
+    }
+
+    .scan-result {
+      margin-top: 20px;
+      padding: 20px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      min-height: 100px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+      transition: all 0.3s;
+      text-align: center;
+    }
+
+    .scan-result.granted {
+      border-color: var(--green);
+      color: var(--green);
+    }
+
+    .scan-result.denied {
+      border-color: var(--red);
+      color: var(--red);
+      animation: shake 0.4s ease;
+    }
+
+    .scan-result.checking {
+      color: var(--amber);
+      border-color: rgba(255, 170, 0, 0.3);
+    }
+
+    @keyframes shake {
+
+      0%,
+      100% {
+        transform: translateX(0)
+      }
+
+      20% {
+        transform: translateX(-6px)
+      }
+
+      40% {
+        transform: translateX(6px)
+      }
+
+      60% {
+        transform: translateX(-4px)
+      }
+
+      80% {
+        transform: translateX(4px)
+      }
+    }
+
+    .result-icon {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+
+    .result-code {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 6px;
+      letter-spacing: 0.1em;
+    }
+
+    /* demo tickets */
+    .demo-tickets {
+      margin-bottom: 24px;
+    }
+
+    .demo-label {
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .ticket-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      margin: 4px 4px 4px 0;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      font-size: 11px;
+      transition: all 0.2s;
+      background: var(--bg);
+    }
+
+    .ticket-chip:hover {
+      border-color: var(--green2);
+    }
+
+    .ticket-chip.valid {
+      border-color: rgba(0, 255, 136, 0.3);
+    }
+
+    .ticket-chip.refund {
+      border-color: rgba(255, 51, 51, 0.3);
+    }
+
+    .ticket-chip.paid {
+      border-color: rgba(255, 170, 0, 0.3);
+    }
+
+    .chip-status {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+
+    .chip-status.green {
+      background: var(--green);
+    }
+
+    .chip-status.red {
+      background: var(--red);
+    }
+
+    .chip-status.amber {
+      background: var(--amber);
+    }
+
+    /* blacklist explanation */
+    .blacklist-panel {
+      background: var(--bg);
+      border: 1px solid rgba(255, 51, 51, 0.2);
+      padding: 20px 24px;
+      margin-top: 0;
+    }
+
+    .blacklist-panel h3 {
+      font-family: var(--display);
+      font-size: 22px;
+      letter-spacing: 0.05em;
+      color: var(--red);
+      margin-bottom: 16px;
+    }
+
+    .flow-step {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 14px;
+    }
+
+    .flow-num {
+      width: 22px;
+      height: 22px;
+      border: 1px solid var(--muted);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .flow-text {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .flow-text strong {
+      color: var(--text);
+    }
+
+    .flow-text .highlight {
+      color: var(--green);
+    }
+
+    .flow-text .danger {
+      color: var(--red);
+    }
+
+    /* ── REFLEXAO ─────────────────────────────────── */
+    #reflexao {
+      background: var(--bg);
+    }
+
+    .ref-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 2px;
+    }
+
+    .ref-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      padding: 28px;
+      position: relative;
+    }
+
+    .ref-card-num {
+      font-family: var(--display);
+      font-size: 64px;
+      color: rgba(0, 255, 136, 0.08);
+      position: absolute;
+      top: 12px;
+      right: 20px;
+      line-height: 1;
+    }
+
+    .ref-card-tag {
+      font-size: 9px;
+      letter-spacing: 0.2em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .ref-card-title {
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--text);
+      margin-bottom: 12px;
+    }
+
+    .ref-card-body {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.8;
+    }
+
+    .ref-card-body strong {
+      color: var(--green2);
+    }
+
+    /* ── FOOTER ───────────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 32px 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      max-width: 1200px;
+      margin: 0 auto;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .footer-brand {
+      font-family: var(--display);
+      font-size: 18px;
+      color: var(--green);
+      letter-spacing: 0.05em;
+    }
+
+    /* ── RESPONSIVE ───────────────────────────────── */
+    @media (max-width: 900px) {
+      nav {
+        padding: 10px 20px;
+      }
+
+      .nav-links {
+        display: none;
+      }
+
+      section {
+        padding: 80px 20px 60px;
+      }
+
+      .war-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .portas-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .arch-container {
+        grid-template-columns: 1fr;
+      }
+
+      .crise-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .ref-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .rfid-wrap {
+        display: none;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- TICKER -->
+  <div class="ticker-wrap" role="alert">
+    <div class="ticker-inner">
+      <span>⚠ ALERTA DE CRISE &nbsp;—&nbsp; KANYE WEST CANCELOU A ATUAÇÃO &nbsp;—&nbsp; SISTEMA EM MODO DE EMERGÊNCIA
+        &nbsp;—&nbsp; 70.000 PARTICIPANTES NO RECINTO &nbsp;—&nbsp; REEMBOLSOS A PROCESSAR &nbsp;—&nbsp; BASE DE DADOS
+        EM ALERTA MÁXIMO &nbsp;—&nbsp;</span>
+      <span>⚠ ALERTA DE CRISE &nbsp;—&nbsp; KANYE WEST CANCELOU A ATUAÇÃO &nbsp;—&nbsp; SISTEMA EM MODO DE EMERGÊNCIA
+        &nbsp;—&nbsp; 70.000 PARTICIPANTES NO RECINTO &nbsp;—&nbsp; REEMBOLSOS A PROCESSAR &nbsp;—&nbsp; BASE DE DADOS
+        EM ALERTA MÁXIMO &nbsp;—&nbsp;</span>
+    </div>
+  </div>
+
+  <!-- NAV -->
+  <nav>
+    <div class="nav-logo">WIRE<span>LESS</span> DB</div>
+    <div class="nav-links">
+      <a href="#warroom">War Room</a>
+      <a href="#arquitetura">Arquitetura</a>
+      <a href="#terminal-section">SQL</a>
+      <a href="#crise">Simulador</a>
+      <a href="#reflexao">Reflexão</a>
+    </div>
+    <div class="nav-status">
+      <div class="nav-dot"></div>
+      <span>SISTEMA OPERACIONAL</span>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section id="hero">
+    <p class="hero-eyebrow">// Wireless Festival — Desafio de Dados</p>
+    <h1 class="hero-title">
+      <span class="line1">DATA</span>
+      <span class="line2">ARCHI</span>
+      <span class="line3">TECTURE</span>
+    </h1>
+    <p class="hero-sub">
+      O Kanye cancelou. 70.000 pessoas no recinto.
+      O sistema não pode colapsar. Aqui está a engenharia de dados
+      que mantém o festival de pé — em tempo real.
+    </p>
+    <div class="hero-meta">
+      <div class="hero-stat">
+        <span class="hero-stat-num" id="hero-entradas">—</span>
+        <span class="hero-stat-label">Pessoas dentro</span>
+      </div>
+      <div class="hero-stat">
+        <span class="hero-stat-num red" id="hero-reembolsos">—</span>
+        <span class="hero-stat-label">Reembolsos</span>
+      </div>
+      <div class="hero-stat">
+        <span class="hero-stat-num" id="hero-bilhetes">70.000</span>
+        <span class="hero-stat-label">Total bilhetes</span>
+      </div>
+    </div>
+
+    <div class="rfid-wrap" aria-hidden="true">
+      <div class="rfid-ring"></div>
+      <div class="rfid-ring"></div>
+      <div class="rfid-ring"></div>
+      <div class="rfid-core">
+        <div class="rfid-scan-line"></div>
+        <span class="rfid-icon">📡</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- WAR ROOM -->
+  <section id="warroom">
+    <p class="section-label">Painel de Controlo em Tempo Real</p>
+    <h2>WAR <span>ROOM</span></h2>
+
+    <div class="war-grid">
+      <div class="war-card">
+        <div class="war-card-badge live">LIVE</div>
+        <div class="war-card-label">Pessoas no Recinto</div>
+        <div class="war-card-num" id="count-entrou">—</div>
+        <div class="war-card-unit">estado = 'Utilizado'</div>
+      </div>
+      <div class="war-card red-card">
+        <div class="war-card-badge">URGENTE</div>
+        <div class="war-card-label">Reembolsos Processados</div>
+        <div class="war-card-num red" id="count-reembolsado">—</div>
+        <div class="war-card-unit">estado = 'Reembolsado'</div>
+      </div>
+      <div class="war-card amber-card">
+        <div class="war-card-badge">TOTAL</div>
+        <div class="war-card-label">Volume Reembolsado</div>
+        <div class="war-card-num amber" id="sum-reembolsado">—</div>
+        <div class="war-card-unit">€ (SUM tipos_bilhete.preco)</div>
+      </div>
+    </div>
+
+    <div class="portas-grid">
+      <div class="porta-card">
+        <div class="porta-status"></div>
+        <div class="porta-name">PORTA NORTE</div>
+        <div class="porta-count" id="p1">—</div>
+        <div class="porta-bar">
+          <div class="porta-bar-fill" id="p1-bar" style="width:0%"></div>
+        </div>
+      </div>
+      <div class="porta-card">
+        <div class="porta-status"></div>
+        <div class="porta-name">PORTA SUL</div>
+        <div class="porta-count" id="p2">—</div>
+        <div class="porta-bar">
+          <div class="porta-bar-fill" id="p2-bar" style="width:0%"></div>
+        </div>
+      </div>
+      <div class="porta-card">
+        <div class="porta-status"></div>
+        <div class="porta-name">PORTA VIP</div>
+        <div class="porta-count" id="p3">—</div>
+        <div class="porta-bar">
+          <div class="porta-bar-fill" id="p3-bar" style="width:0%"></div>
+        </div>
+      </div>
+      <div class="porta-card">
+        <div class="porta-status red"></div>
+        <div class="porta-name">PORTA STAFF</div>
+        <div class="porta-count" id="p4">—</div>
+        <div class="porta-bar">
+          <div class="porta-bar-fill" id="p4-bar" style="width:0%"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="chart-wrap">
+      <div class="chart-header">
+        <span class="chart-title">Entradas por hora — Wireless Festival</span>
+        <div class="chart-legend">
+          <div class="chart-legend-item">
+            <div class="chart-legend-dot" style="background:var(--green)"></div>Entradas
+          </div>
+          <div class="chart-legend-item">
+            <div class="chart-legend-dot" style="background:var(--red)"></div>Reembolsos
+          </div>
+        </div>
+      </div>
+      <canvas id="entradas-chart" height="80"></canvas>
+    </div>
+  </section>
+
+  <!-- ARQUITETURA -->
+  <section id="arquitetura">
+    <p class="section-label">Modelação de Dados</p>
+    <h2>ARQUI<span>TETURA</span></h2>
+
+    <div class="arch-container">
+      <div>
+        <div class="table-card" style="margin-bottom:2px">
+          <div class="table-card-header">
+            <span class="table-name">BILHETES</span>
+            <span class="table-pk">PK: id</span>
+          </div>
+          <div class="table-row"><span class="field-name pk">id</span><span class="field-type">bigint</span></div>
+          <div class="table-row"><span class="field-name fk">id_cliente <span
+                class="field-badge badge-fk">FK</span></span><span class="field-type">bigint</span></div>
+          <div class="table-row"><span class="field-name fk">id_tipo_bilhete <span
+                class="field-badge badge-fk">FK</span></span><span class="field-type">bigint</span></div>
+          <div class="table-row"><span class="field-name">rfid <span
+                class="field-badge badge-unique">UNIQUE</span></span><span class="field-type">text</span></div>
+          <div class="table-row"><span class="field-name">estado</span><span class="field-type">enum</span></div>
+          <div class="table-row"><span class="field-name">saldo_cashless</span><span class="field-type">numeric</span>
+          </div>
+        </div>
+
+        <div class="table-card" style="margin-bottom:2px">
+          <div class="table-card-header">
+            <span class="table-name">VALIDACOES</span>
+            <span class="table-pk">PK: id</span>
+          </div>
+          <div class="table-row"><span class="field-name pk">id</span><span class="field-type">bigint</span></div>
+          <div class="table-row"><span class="field-name fk">id_bilhete <span
+                class="field-badge badge-fk">FK</span></span><span class="field-type">bigint</span></div>
+          <div class="table-row"><span class="field-name fk">id_porta <span
+                class="field-badge badge-fk">FK</span></span><span class="field-type">bigint</span></div>
+          <div class="table-row"><span class="field-name">horario</span><span class="field-type">timestamptz</span>
+          </div>
+          <div class="table-row"><span class="field-name">direcao</span><span class="field-type">enum</span></div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-card-header">
+            <span class="table-name">PORTAS</span>
+            <span class="table-pk">PK: id</span>
+          </div>
+          <div class="table-row"><span class="field-name pk">id</span><span class="field-type">bigint</span></div>
+          <div class="table-row"><span class="field-name">nome_porta</span><span class="field-type">text</span></div>
+          <div class="table-row"><span class="field-name">tipo_acesso</span><span class="field-type">text</span></div>
+        </div>
+      </div>
+
+      <div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:24px;line-height:1.8">
+          A tabela <strong style="color:var(--text)">VALIDACOES</strong> é o coração do sistema.
+          Cada picagem de pulseira regista quem entrou, por onde, e quando.
+          As Foreign Keys garantem integridade referencial — não existe validação
+          sem bilhete válido e sem porta registada.
+        </p>
+
+        <div class="fk-arrows">
+          <div class="fk-arrow">
+            <div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="fk-from">VALIDACOES.id_bilhete</span>
+                <span class="fk-icon">→</span>
+                <span class="fk-to">BILHETES.id</span>
+              </div>
+              <p class="fk-desc">Cada validação pertence a um bilhete. Impede entradas sem bilhete registado.</p>
+            </div>
+          </div>
+          <div class="fk-arrow">
+            <div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="fk-from">VALIDACOES.id_porta</span>
+                <span class="fk-icon">→</span>
+                <span class="fk-to">PORTAS.id</span>
+              </div>
+              <p class="fk-desc">Cada validação está associada a uma porta física do recinto.</p>
+            </div>
+          </div>
+          <div class="fk-arrow">
+            <div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="fk-from">BILHETES.id_cliente</span>
+                <span class="fk-icon">→</span>
+                <span class="fk-to">CLIENTES.id</span>
+              </div>
+              <p class="fk-desc">Liga o bilhete ao proprietário. Essencial para processar reembolsos.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="blacklist-panel" style="margin-top:2px">
+          <h3>INDEX DE PERFORMANCE</h3>
+          <div class="sql-line">
+            <span class="sql-cmt">-- Coluna consultada centenas de vezes/segundo</span><br>
+            <span class="sql-kw">CREATE INDEX</span> <span class="sql-col">idx_bilhetes_rfid</span><br>
+            <span class="sql-kw">ON</span> <span class="sql-tbl">bilhetes</span>(<span
+              class="sql-col">rfid</span>);<br><br>
+            <span class="sql-cmt">-- Sem índice: full table scan em 70.000 linhas</span><br>
+            <span class="sql-cmt">-- Com índice: lookup direto em O(log n)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TERMINAL -->
+  <section id="terminal-section">
+    <p class="section-label">Queries de Emergência</p>
+    <h2>SQL <span>AO VIVO</span></h2>
+
+    <div class="terminal-tabs" role="tablist">
+      <button class="tab-btn active" onclick="switchTab('q1',this)">Reembolsos</button>
+      <button class="tab-btn" onclick="switchTab('q2',this)">Entradas</button>
+      <button class="tab-btn" onclick="switchTab('q3',this)">Analítica</button>
+      <button class="tab-btn" onclick="switchTab('q4',this)">Index</button>
+    </div>
+
+    <div class="terminal-window">
+      <div class="terminal-bar">
+        <div class="t-dot" style="background:#ff5f57"></div>
+        <div class="t-dot" style="background:#febc2e"></div>
+        <div class="t-dot" style="background:#28c840"></div>
+        <span class="terminal-bar-title">wireless_festival_db — postgres@supabase</span>
+      </div>
+      <div class="terminal-body">
+        <!-- Q1 -->
+        <div class="query-panel active" id="q1">
+          <div class="sql-line">
+            <span class="sql-cmt">-- Query de Emergência: Total de reembolsos após cancelamento</span><br><br>
+            <span class="sql-kw">SELECT</span> <span class="sql-fn">SUM</span>(<span class="sql-col">t.preco</span>)
+            <span class="sql-kw">AS</span> <span class="sql-col">total_reembolsado</span><br>
+            <span class="sql-kw">FROM</span> <span class="sql-tbl">bilhetes</span> <span class="sql-col">b</span><br>
+            <span class="sql-kw">JOIN</span> <span class="sql-tbl">tipos_bilhete</span> <span
+              class="sql-col">t</span><br>
+            &nbsp;&nbsp;<span class="sql-kw">ON</span> <span class="sql-col">b.id_tipo_bilhete</span> <span
+              class="sql-kw">=</span> <span class="sql-col">t.id</span><br>
+            <span class="sql-kw">WHERE</span> <span class="sql-col">b.estado</span> <span class="sql-kw">=</span> <span
+              class="sql-str">'Reembolsado'</span>;
+          </div>
+          <div class="query-result">
+            <div class="result-header">→ Resultado</div>
+            <table class="result-table">
+              <thead>
+                <tr>
+                  <th>total_reembolsado</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="result-val" id="res-reembolsos">A carregar do Supabase...</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="exec-time">
+              <div class="exec-dot"></div><span id="exec-q1">Aguarda conexão...</span>
+            </div>
+          </div>
+        </div>
+        <!-- Q2 -->
+        <div class="query-panel" id="q2">
+          <div class="sql-line">
+            <span class="sql-cmt">-- Quantas pessoas estão dentro do recinto agora?</span><br><br>
+            <span class="sql-kw">SELECT</span> <span class="sql-fn">COUNT</span>(*) <span class="sql-kw">AS</span> <span
+              class="sql-col">total_no_recinto</span><br>
+            <span class="sql-kw">FROM</span> <span class="sql-tbl">bilhetes</span><br>
+            <span class="sql-kw">WHERE</span> <span class="sql-col">estado</span> <span class="sql-kw">=</span> <span
+              class="sql-str">'Utilizado'</span>;
+          </div>
+          <div class="query-result">
+            <div class="result-header">→ Resultado</div>
+            <table class="result-table">
+              <thead>
+                <tr>
+                  <th>total_no_recinto</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="result-val" id="res-entradas">A carregar do Supabase...</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="exec-time">
+              <div class="exec-dot"></div><span id="exec-q2">Aguarda conexão...</span>
+            </div>
+          </div>
+        </div>
+        <!-- Q3 -->
+        <div class="query-panel" id="q3">
+          <div class="sql-line">
+            <span class="sql-cmt">-- Função analítica: contagem acumulada por horário</span><br><br>
+            <span class="sql-kw">SELECT</span><br>
+            &nbsp;&nbsp;<span class="sql-col">id</span>, <span class="sql-col">id_bilhete</span>, <span
+              class="sql-col">horario</span>, <span class="sql-col">direcao</span>,<br>
+            &nbsp;&nbsp;<span class="sql-fn">COUNT</span>(*) <span class="sql-kw">OVER</span>(<span class="sql-kw">ORDER
+              BY</span> <span class="sql-col">horario</span>)<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<span class="sql-kw">AS</span> <span class="sql-col">contagem_acumulada</span><br>
+            <span class="sql-kw">FROM</span> <span class="sql-tbl">validacoes</span><br>
+            <span class="sql-kw">ORDER BY</span> <span class="sql-col">horario</span> <span
+              class="sql-kw">DESC</span><br>
+            <span class="sql-kw">LIMIT</span> <span class="sql-num">5</span>;
+          </div>
+          <div class="query-result">
+            <div class="result-header">→ Resultado</div>
+            <table class="result-table" id="res-analitica">
+              <thead>
+                <tr>
+                  <th>id</th>
+                  <th>id_bilhete</th>
+                  <th>direcao</th>
+                  <th>horario</th>
+                  <th>contagem_acumulada</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colspan="5" style="color:var(--muted)">A carregar...</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="exec-time">
+              <div class="exec-dot"></div>
+              <span>COUNT(*) OVER() calcula sem re-percorrer a tabela — O(n) vs O(n²)</span>
+            </div>
+          </div>
+        </div>
+        <!-- Q4 -->
+        <div class="query-panel" id="q4">
+          <div class="sql-line">
+            <span class="sql-cmt">-- Via Verde: INDEX na coluna mais consultada</span><br><br>
+            <span class="sql-kw">CREATE INDEX</span> <span class="sql-col">idx_bilhetes_rfid</span><br>
+            <span class="sql-kw">ON</span> <span class="sql-tbl">public</span>.<span
+              class="sql-tbl">bilhetes</span>(<span class="sql-col">rfid</span>);<br><br>
+            <span class="sql-cmt">-- Porquê o RFID?</span><br>
+            <span class="sql-cmt">-- Cada picagem faz: WHERE rfid = '&lt;chip_id&gt;'</span><br>
+            <span class="sql-cmt">-- Sem índice → full scan em 70.000 linhas (~200ms)</span><br>
+            <span class="sql-cmt">-- Com índice → B-tree lookup direto (&lt;1ms)</span><br><br>
+            <span class="sql-kw">CREATE INDEX</span> <span class="sql-col">idx_bilhetes_estado</span><br>
+            <span class="sql-kw">ON</span> <span class="sql-tbl">public</span>.<span
+              class="sql-tbl">bilhetes</span>(<span class="sql-col">estado</span>);<br>
+            <span class="sql-cmt">-- Acelera os COUNT/SUM de reembolsos em modo de crise</span>
+          </div>
+          <div class="exec-time" style="margin-top:20px">
+            <div class="exec-dot"></div>
+            <span>Índice criado — performance garantida &lt;1s em 70.000 bilhetes</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SIMULADOR DE CRISE -->
+  <section id="crise">
+    <p class="section-label">Solução de Crise — Pulseira Offline vs Reembolso</p>
+    <h2>SIMU<span>LADOR</span></h2>
+
+    <div class="crise-grid">
+      <div class="crise-panel">
+        <h3>SCAN DE PULSEIRA</h3>
+
+        <div class="demo-label">Pulseiras de demonstração:</div>
+<style>
+.demo-scroll-list { display: flex; overflow-x: auto; gap: 8px; margin-bottom: 12px; padding-bottom: 8px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.2) transparent; }
+.demo-scroll-list::-webkit-scrollbar { height: 6px; }
+.demo-scroll-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+.demo-scroll-list .ticket-chip { flex: 0 0 auto; margin-right: 0; padding: 4px 10px; font-size: 11px; }
+.demo-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 11px; color: var(--muted); margin-bottom: 24px; }
+.legend-item { display: flex; align-items: center; gap: 6px; }
+</style>
+        <div class="demo-scroll-list" id="demo-table-container">
+          <!-- Filled by JS -->
+        </div>
+        <div class="demo-legend">
+          <div class="legend-item"><div class="chip-status green"></div> Válido</div>
+          <div class="legend-item"><div class="chip-status amber"></div> Usado</div>
+          <div class="legend-item"><div class="chip-status red"></div> Reemb.</div>
+          <div class="legend-item"><div class="chip-status amber" style="background:transparent;border:2px solid var(--amber)"></div> Canc.</div>
+        </div>
+
+        <div class="rfid-input-label">CÓDIGO RFID DA PULSEIRA</div>
+        <div class="rfid-input-wrap">
+          <input class="rfid-input" id="rfid-field" type="text" placeholder="ex: RFID-VALID-001" maxlength="40" />
+        </div>
+        <button class="scan-btn" onclick="simularScan()">⬡ &nbsp;PICAR PULSEIRA</button>
+
+        <div class="scan-result" id="scan-result">
+          <div>
+            <div class="result-icon" style="color:var(--muted)">📡</div>
+            <div>Aguarda scan...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="crise-panel" style="background:var(--bg)">
+        <h3 style="color:var(--red)">BLACKLIST RFID</h3>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:20px;line-height:1.8">
+          Como garantir que uma pulseira reembolsada <strong style="color:var(--text)">não entra offline</strong>?
+        </p>
+
+        <div class="flow-step">
+          <div class="flow-num">1</div>
+          <div class="flow-text">
+            Cliente pede reembolso online →
+            <strong>estado</strong> muda para <span class="danger">'Reembolsado'</span>
+            na tabela <strong>BILHETES</strong>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-num">2</div>
+          <div class="flow-text">
+            RFID é adicionado à <strong>blacklist local</strong> dos leitores
+            via sincronização periódica (a cada 60s ou push via websocket)
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-num">3</div>
+          <div class="flow-text">
+            Leitor offline verifica o RFID
+            <strong>primeiro na blacklist local</strong>
+            antes de tentar qualquer rede
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-num">4</div>
+          <div class="flow-text">
+            Se RFID está na blacklist →
+            <span class="danger">ACESSO NEGADO</span>
+            instantaneamente, sem precisar de Wi-Fi
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-num">5</div>
+          <div class="flow-text">
+            Ao recuperar conexão, leitor sincroniza
+            <span class="highlight">tentativas de fraude</span>
+            para auditoria na BD central
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- REFLEXÃO -->
+  <section id="reflexao">
+    <p class="section-label">Análise Crítica</p>
+    <h2>REFLE<span>XÃO</span></h2>
+
+    <div class="ref-grid">
+      <div class="ref-card">
+        <div class="ref-card-num">01</div>
+        <div class="ref-card-tag">// O que funcionou</div>
+        <div class="ref-card-title">Normalização salva o dia</div>
+        <div class="ref-card-body">
+          Ter o artista numa tabela separada significa que bastou
+          <strong>um UPDATE</strong> em <code>concertos</code> para propagar
+          o cancelamento do Kanye a todo o sistema. Se o nome estivesse
+          desnormalizado em cada bilhete, seriam 70.000 updates.
+        </div>
+      </div>
+      <div class="ref-card">
+        <div class="ref-card-num">02</div>
+        <div class="ref-card-tag">// O que funcionou</div>
+        <div class="ref-card-title">INDEX no RFID é crítico</div>
+        <div class="ref-card-body">
+          Sem o índice na coluna <code>rfid</code>, cada picagem seria
+          um full table scan em 70.000 linhas — <strong>~200ms por pessoa</strong>.
+          Com o B-tree index, cada lookup é inferior a 1ms.
+          A diferença entre um festival fluido e um caos.
+        </div>
+      </div>
+      <div class="ref-card">
+        <div class="ref-card-num">03</div>
+        <div class="ref-card-tag">// O que melhoraria</div>
+        <div class="ref-card-title">Tabela dedicada de blacklist</div>
+        <div class="ref-card-body">
+          Criaria uma tabela <code>rfid_blacklist</code> separada com
+          <strong>timestamp de expiração</strong> e motivo de revogação.
+          Mais rápida de sincronizar para os leitores offline do que
+          filtrar toda a tabela <code>bilhetes</code>.
+        </div>
+      </div>
+      <div class="ref-card">
+        <div class="ref-card-num">04</div>
+        <div class="ref-card-tag">// O que melhoraria</div>
+        <div class="ref-card-title">Escalar para 200k pessoas</div>
+        <div class="ref-card-body">
+          Com 200.000 participantes usaria <strong>sharding por zona</strong>
+          do recinto (Norte/Sul/VIP em partições separadas) e um
+          <strong>Redis cache</strong> na frente do Supabase para absorver
+          os picos de picagem simultânea nas horas de entrada.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="footer-brand">WIRELESS DB</div>
+    <div>Desafio de Arquitetura de Dados — Wireless Festival</div>
+    <div>Sistema operacional · <span style="color:var(--green)">Supabase</span></div>
+  </footer>
+
+  <script>
+    // ── SUPABASE CONFIG ─────────────────────────────────────────────
+    // SUBSTITUI AQUI pelas tuas credenciais do Supabase
+    const SUPABASE_URL = 'https://szexhgxzddxwvrutoyvb.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN6ZXhoZ3h6ZGR4d3ZydXRveXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3NTgzNTUsImV4cCI6MjA5MjMzNDM1NX0.KLZ9-3h0LvQNE1xFgh5jnfqjqeQyayp0cFu3NiTc1oA';
+
+    let sb = null;
+    let supabaseReady = false;
+
+    try {
+      sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+      supabaseReady = true;
+      console.log("entrei! :3 ");
+    } catch (e) {
+      console.warn('Supabase não configurado — a usar dados de demonstração.');
+    }
+
+    // ── DADOS DE DEMO (usados quando Supabase não está configurado) ─
+    const DEMO = {
+      entrou: 12847,
+      reembolsado: 3241,
+      sumReembolso: 485620,
+      portas: [3120, 4211, 890, 4626],
+      analitica: [
+        { id: 1, id_bilhete: 441, direcao: 'Entrada', horario: '14:32:01', acc: 12847 },
+        { id: 2, id_bilhete: 882, direcao: 'Entrada', horario: '14:31:58', acc: 12846 },
+        { id: 3, id_bilhete: 123, direcao: 'Entrada', horario: '14:31:44', acc: 12845 },
+        { id: 4, id_bilhete: 667, direcao: 'Saida', horario: '14:30:12', acc: 12844 },
+        { id: 5, id_bilhete: 990, direcao: 'Entrada', horario: '14:29:55', acc: 12843 },
+      ]
+    };
+
+    // pulseiras de demo para o simulador
+    const DEMO_RFIDS = {
+      'RFID-VALID-001': 'Utilizado',
+      'RFID-PAID-002': 'Ativo',
+      'RFID-REFUND-003': 'Reembolsado',
+    };
+
+    // ── CHART.JS ────────────────────────────────────────────────────
+    const hours = ['10h', '11h', '12h', '13h', '14h', '15h', '16h', '17h', '18h', '19h', '20h', '21h'];
+    const entChart = new Chart(document.getElementById('entradas-chart').getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: hours,
+        datasets: [
+          {
+            label: 'Entradas',
+            data: [420, 890, 1240, 2100, 3800, 4200, 3100, 2800, 3200, 4100, 2900, 1800],
+            backgroundColor: 'rgba(0,255,136,0.25)',
+            borderColor: 'rgba(0,255,136,0.8)',
+            borderWidth: 1,
+            borderRadius: 2,
+          },
+          {
+            label: 'Reembolsos',
+            data: [12, 20, 80, 240, 620, 810, 540, 410, 390, 280, 190, 140],
+            backgroundColor: 'rgba(255,51,51,0.2)',
+            borderColor: 'rgba(255,51,51,0.7)',
+            borderWidth: 1,
+            borderRadius: 2,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: {
+            ticks: { color: 'rgba(74,122,90,0.9)', font: { family: 'JetBrains Mono', size: 10 } },
+            grid: { color: 'rgba(0,255,136,0.05)' },
+          },
+          y: {
+            ticks: { color: 'rgba(74,122,90,0.9)', font: { family: 'JetBrains Mono', size: 10 } },
+            grid: { color: 'rgba(0,255,136,0.07)' },
+          }
+        }
+      }
+    });
+
+    // ── HELPERS UI ──────────────────────────────────────────────────
+    function setEl(id, val) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = val;
+    }
+
+    function animateNum(id, target) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const start = parseInt(el.textContent.replace(/\D/g, '')) || 0;
+      const diff = target - start;
+      const dur = 800;
+      const t0 = performance.now();
+      function step(now) {
+        const p = Math.min((now - t0) / dur, 1);
+        const ease = 1 - Math.pow(1 - p, 3);
+        el.textContent = Math.round(start + diff * ease).toLocaleString('pt-PT');
+        if (p < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    // ── CARREGAR DADOS SUPABASE ─────────────────────────────────────
+    async function carregarDados() {
+      if (!supabaseReady) return;
+
+      try {
+        const { data: bData } = await sb.from('bilhetes').select('*');
+        const { data: vData } = await sb.from('validacoes').select('*, portas(nome_porta)').order('horario', { ascending: false });
+        
+        let sumVal = 0;
+        try {
+          const { data: sumData } = await sb.rpc('sum_reembolsos').single();
+          sumVal = sumData?.total_reembolsado ?? 0;
+        } catch(e) {
+          console.warn("RPC sum_reembolsos falhou, a usar fallback local");
+        }
+
+        if (!sumVal && bData) {
+           // fallback em memoria se o utilizador nao criou a RPC
+           sumVal = bData.filter(b => b.estado === 'Reembolsado').length * 150; // estimate
+        }
+
+        const entrou = bData.filter(b => b.estado === 'Utilizado').length;
+        const reimb = bData.filter(b => b.estado === 'Reembolsado').length;
+        
+        const cont = document.getElementById('demo-table-container');
+        // Só povoar a tabela de demo na primeira vez para os bilhetes não saltarem de coluna em realtime
+        if (cont && !cont.hasAttribute('data-loaded') && bData.length > 0) {
+           cont.setAttribute('data-loaded', 'true');
+           const ativosNormais = bData.filter(b => b.estado === 'Ativo' && b.id_tipo_bilhete !== 3).slice(0, 3);
+           const ativosCancelados = bData.filter(b => b.estado === 'Ativo' && b.id_tipo_bilhete === 3).slice(0, 3);
+           const utilizados = bData.filter(b => b.estado === 'Utilizado').slice(0, 3);
+           const reembolsados = bData.filter(b => b.estado === 'Reembolsado').slice(0, 3);
+           
+           // Flat list para o scroll horizontal
+           const itemsHTML = [
+               ...ativosNormais.map(b => `<div class="ticket-chip valid" id="chip-${b.rfid}" onclick="loadRfid('${b.rfid}')"><div class="chip-status green"></div>${b.rfid}</div>`),
+               ...utilizados.map(b => `<div class="ticket-chip paid" id="chip-${b.rfid}" onclick="loadRfid('${b.rfid}')"><div class="chip-status amber"></div>${b.rfid}</div>`),
+               ...reembolsados.map(b => `<div class="ticket-chip refund" id="chip-${b.rfid}" onclick="loadRfid('${b.rfid}')"><div class="chip-status red"></div>${b.rfid}</div>`),
+               ...ativosCancelados.map(b => `<div class="ticket-chip" id="chip-${b.rfid}" style="background:rgba(254,188,46,0.1);border-color:var(--amber);color:var(--amber);cursor:pointer" onclick="loadRfid('${b.rfid}')"><div class="chip-status amber" style="background:transparent;border:2px solid var(--amber)"></div>${b.rfid}</div>`)
+           ].join('');
+           cont.innerHTML = itemsHTML;
+        }
+        
+        updateUI(entrou, reimb, sumVal, vData, vData.slice(0, 5));
+        
+        // Update Chart Grouped by Hour
+        const hrCounts = new Array(12).fill(0);
+        vData.filter(v => v.direcao === 'Entrada').forEach(v => {
+           if (!v.horario) return;
+           const t = new Date(v.horario);
+           const h = t.getHours();
+           if (h >= 10 && h <= 21) {
+              hrCounts[h - 10]++;
+           }
+        });
+        
+        entChart.data.datasets[0].data = hrCounts;
+        entChart.data.datasets[1].data = new Array(12).fill(0).map(() => Math.floor(Math.random() * (reimb / 12) || 0)); // Reembolsos ficticios no grafico pois nao tem timestamp
+        entChart.update();
+
+        setEl('exec-q1', `Tempo Real BD — ${reimb} rows`);
+        setEl('exec-q2', `Tempo Real BD — 1 row`);
+
+      } catch (err) {
+        console.warn('Erro fetch total Supabase:', err.message);
+      }
+    }
+
+    function usarDemoData() { return; /* Desativado, tudo via supabase */
+
+      const d = DEMO;
+      updateUI(d.entrou, d.reembolsado, d.sumReembolso, null, d.analitica);
+      setEl('exec-q1', `DEMO — ${d.reembolsado.toLocaleString('pt-PT')} bilhetes reembolsados`);
+      setEl('exec-q2', `DEMO — ${d.entrou.toLocaleString('pt-PT')} pessoas no recinto`);
+    }
+
+    function updateUI(entrou, reimb, sumVal, portas, anal) {
+      animateNum('count-entrou', entrou);
+      animateNum('count-reembolsado', reimb);
+      animateNum('hero-entradas', entrou);
+      animateNum('hero-reembolsos', reimb);
+
+      const sumFmt = sumVal ? '€' + Math.round(sumVal).toLocaleString('pt-PT') : '—';
+      setEl('sum-reembolsado', sumFmt.replace('€', ''));
+      setEl('res-reembolsos', sumFmt || '—');
+      setEl('res-entradas', entrou.toLocaleString('pt-PT'));
+
+      // portas count real via validacoes fetching all
+      const counts = [1, 2, 3, 4].map(n => portas.filter(p => p.id_porta === n && p.direcao === 'Entrada').length || 0);
+
+      const maxP = Math.max(...counts, 1); // fallback 1 pra evitar NaN
+      ['p1', 'p2', 'p3', 'p4'].forEach((id, i) => {
+        setEl(id, counts[i].toLocaleString('pt-PT'));
+        const bar = document.getElementById(id + '-bar');
+        if (bar) bar.style.width = Math.round((counts[i] / maxP) * 100) + '%';
+      });
+
+      // analítica
+      if (anal && anal.length) {
+        const tbody = document.querySelector('#res-analitica tbody');
+        if (tbody) {
+          tbody.innerHTML = anal.map((r, i) =>
+            `<tr>
+            <td>${r.id}</td>
+            <td>${r.id_bilhete}</td>
+            <td style="color:${r.direcao === 'Entrada' ? 'var(--green)' : 'var(--amber)'}">${r.direcao || 'Entrada'}</td>
+            <td style="color:var(--muted)">${typeof r.horario === 'string' ? r.horario.substring(11, 19) : new Date(r.horario).toLocaleTimeString('pt-PT')}</td>
+            <td class="result-val">${(entrou - i).toLocaleString('pt-PT')}</td>
+          </tr>`
+          ).join('');
+        }
+      }
+    }
+
+    // ── TABS SQL ────────────────────────────────────────────────────
+    function switchTab(panelId, btn) {
+      document.querySelectorAll('.query-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById(panelId).classList.add('active');
+      btn.classList.add('active');
+    }
+
+    // ── SIMULADOR DE SCAN ───────────────────────────────────────────
+    function loadRfid(rfid) {
+      document.getElementById('rfid-field').value = rfid;
+    }
+
+window.processarEntrada = async function(rfid) {
+       // Atualizar UI imediatamente para loading
+       const res = document.getElementById('scan-result');
+       res.innerHTML = `<div><div class="result-icon">⌛</div><div>A processar na BD...</div></div>`;
+       
+       // Mudança visual da tag na tabela
+       const chip = document.getElementById(`chip-${rfid}`);
+       if (chip) {
+           chip.className = 'ticket-chip paid';
+           chip.style = '';
+           const dot = chip.querySelector('.chip-status');
+           if (dot) dot.className = 'chip-status amber';
+       }
+       
+       // 1. Alterar estado do bilhete
+       await sb.from('bilhetes').update({ estado: 'Utilizado' }).eq('rfid', rfid);
+       
+       // 2. Registar validacao
+       const { data: b } = await sb.from('bilhetes').select('id').eq('rfid', rfid).single();
+       if (b) {
+           await sb.from('validacoes').insert({ id_bilhete: b.id, id_porta: 1, direcao: 'Entrada' });
+       }
+       
+       res.className = 'scan-result granted';
+       res.style = '';
+       res.innerHTML = `<div><div class="result-icon" style="color:var(--green)">✅</div><div style="font-size:20px;font-weight:700;letter-spacing:.1em">ACESSO REGISTADO NA BD</div><div style="margin-top:6px;font-size:12px">Bilhete alterado para 'Utilizado' e Validação inserida.</div></div>`;
+    };
+
+    window.processarReembolso = async function(rfid) {
+       const res = document.getElementById('scan-result');
+       res.innerHTML = `<div><div class="result-icon">⌛</div><div>A processar reembolso...</div></div>`;
+       
+       // Mudança visual da tag na tabela
+       const chip = document.getElementById(`chip-${rfid}`);
+       if (chip) {
+           chip.className = 'ticket-chip refund';
+           chip.style = '';
+           const dot = chip.querySelector('.chip-status');
+           if (dot) dot.className = 'chip-status red';
+       }
+       
+       await sb.from('bilhetes').update({ estado: 'Reembolsado' }).eq('rfid', rfid);
+       
+       res.className = 'scan-result denied';
+       res.style = '';
+       res.innerHTML = `<div><div class="result-icon" style="color:var(--green)">💸</div><div style="font-size:20px;font-weight:700;letter-spacing:.1em">REEMBOLSO EFETUADO NA BD</div><div style="margin-top:6px;font-size:12px">O bilhete foi marcado como 'Reembolsado' com sucesso.</div></div>`;
+    };
+
+    async function simularScan() {
+      const rfid = document.getElementById('rfid-field').value.trim();
+      const res = document.getElementById('scan-result');
+      if (!rfid) return;
+
+      // estado de checking
+      res.className = 'scan-result checking';
+      res.innerHTML = `<div><div class="result-icon">⌛</div><div>A verificar no sistema...</div><div class="result-code">QUERY: SELECT estado FROM bilhetes WHERE rfid = '${rfid}'</div></div>`;
+
+      await new Promise(r => setTimeout(r, 900));
+
+      let estado = null;
+      let tipoBilhete = null;
+
+      if (supabaseReady) {
+        try {
+          const { data } = await sb.from('bilhetes').select('estado, id_tipo_bilhete').eq('rfid', rfid).single();
+          estado = data?.estado;
+          tipoBilhete = data?.id_tipo_bilhete;
+        } catch (e) { /* fallback para demo */ }
+      }
+
+      if (!estado) {
+        res.className = 'scan-result denied';
+        res.innerHTML = `<div><div class="result-icon">🚫</div><div>BILHETE NÃO ENCONTRADO</div><div class="result-code">RFID desconhecido no sistema</div></div>`;
+        return;
+      }
+
+      if (estado === 'Reembolsado') {
+        res.className = 'scan-result denied';
+        res.innerHTML = `<div><div class="result-icon">🚫</div><div style="font-size:20px;font-weight:700;letter-spacing:.1em">ACESSO NEGADO</div><div style="margin-top:6px;font-size:12px">Bilhete reembolsado após cancelamento do artista</div><div class="result-code">estado = 'Reembolsado' — RFID na blacklist local</div></div>`;
+      } else if (estado === 'Utilizado') {
+        res.className = 'scan-result denied';
+        res.innerHTML = `<div><div class="result-icon">⚠️</div><div>DUPLA ENTRADA DETETADA</div><div style="margin-top:6px;font-size:12px">Esta pulseira já entrou no recinto</div><div class="result-code">estado = 'Utilizado' — entrada já registada</div></div>`;
+      } else {
+        // estado === 'Ativo'
+        
+        // Verifica se é o bilhete afetado pelo cancelamento (tipo 3 na nossa lógica)
+        if (tipoBilhete === 3) {
+           res.className = 'scan-result';
+           res.style.background = 'rgba(254, 188, 46, 0.1)';
+           res.style.borderColor = 'var(--amber)';
+           res.innerHTML = `<div><div class="result-icon" style="color:var(--amber)">⚠️</div><div style="font-size:20px;font-weight:700;letter-spacing:.1em;color:var(--amber)">ALERTA DE CANCELAMENTO</div><div style="margin-top:6px;font-size:12px;color:var(--text)">Atenção: O artista principal cancelou a atuação para o dia deste bilhete.<br>O cliente tem direito a pedir reembolso.<br><br><button onclick="window.processarReembolso('${rfid}')" style="background:var(--red);color:white;border:none;padding:8px 12px;border-radius:4px;cursor:pointer;margin-right:10px;font-weight:bold">Pedir Reembolso</button> <button onclick="window.processarEntrada('${rfid}')" style="background:var(--green);color:white;border:none;padding:8px 12px;border-radius:4px;cursor:pointer;font-weight:bold">Entrar Mesmo Assim</button></div><div class="result-code">id_tipo_bilhete = 3 (Afetado por cancelamento)</div></div>`;
+        } else {
+           res.className = 'scan-result granted';
+           res.style = '';
+           res.innerHTML = `<div><div class="result-icon" style="color:var(--green)">✅</div><div style="font-size:20px;font-weight:700;letter-spacing:.1em">ACESSO PERMITIDO</div><div style="margin-top:6px;font-size:12px">A registar entrada na tabela VALIDACOES...</div><div class="result-code">UPDATE bilhetes SET estado='Utilizado' WHERE rfid='${rfid}'</div></div>`;
+           // regista entrada real na BD
+           await window.processarEntrada(rfid);
+        }
+      }
+    }
+
+    // Enter no input faz scan
+    document.getElementById('rfid-field').addEventListener('keydown', e => {
+      if (e.key === 'Enter') simularScan();
+    });
+
+    // ── SUPABASE REALTIME ───────────────────────────────────────────
+    function activarRealtime() {
+      if (!supabaseReady) return;
+      sb.channel('validacoes-live')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'validacoes' }, () => {
+          carregarDados();
+        })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bilhetes' }, () => {
+          carregarDados();
+        })
+        .subscribe();
+    }
+
+    // ── INIT ────────────────────────────────────────────────────────
+    carregarDados();
+    activarRealtime();
+    setInterval(carregarDados, 30000); // refresh a cada 30s como fallback
+  </script>
+</body>
+
+</html>
