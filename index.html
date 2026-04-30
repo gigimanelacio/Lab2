@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt">
 
 <head>
@@ -970,7 +970,7 @@
 
     .crise-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 2fr 1fr;
       gap: 2px;
     }
 
@@ -1369,6 +1369,7 @@
       <a href="#warroom">War Room</a>
       <a href="#arquitetura">Arquitetura</a>
       <a href="#terminal-section">SQL</a>
+      <a href="#schema">Schema</a>
       <a href="#crise">Simulador</a>
       <a href="#reflexao">Reflexão</a>
     </div>
@@ -1746,6 +1747,291 @@
     </div>
   </section>
 
+
+  <!-- SCHEMA VISUALIZER -->
+  <section id="schema">
+    <p class="section-label">Estrutura da Base de Dados — PostgreSQL / Supabase</p>
+    <h2>SCHE<span>MA</span></h2>
+
+<style>
+  .schema-canvas-wrap { position: relative; width: 100%; height: 750px; overflow: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; }
+  .schema-canvas { position: relative; width: 2200px; height: 1200px; background-image: radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px); background-size: 24px 24px; }
+  .schema-canvas svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+  .schema-canvas svg line { stroke: rgba(254,188,46,0.35); stroke-width: 2; }
+  .schema-canvas svg circle.fk-dot { fill: var(--amber); }
+
+  .s-table { position: absolute; background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; min-width: 210px; cursor: grab; z-index: 2; user-select: none; transition: box-shadow .2s; }
+  .s-table:active { cursor: grabbing; z-index: 10; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+  .s-table:hover { border-color: var(--green); box-shadow: 0 0 20px rgba(0,255,136,0.08); }
+  .s-table-hdr { padding: 10px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; background: linear-gradient(135deg, rgba(0,255,136,0.06), transparent); border-radius: 8px 8px 0 0; }
+  .s-table-hdr .ico { font-size: 13px; }
+  .s-table-hdr .name { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--green); }
+  .s-row { display: flex; align-items: center; padding: 5px 14px; font-size: 11px; font-family: var(--mono); border-bottom: 1px solid rgba(255,255,255,0.03); gap: 6px; position: relative; }
+  .s-row:last-child { border-bottom: none; }
+  .s-row .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .s-row .dot.pk { background: var(--green); }
+  .s-row .dot.fk { background: var(--amber); }
+  .s-row .dot.col { background: var(--muted); }
+  .s-row .dot.enum { background: #a78bfa; }
+  .s-row .cname { color: var(--text); flex: 1; }
+  .s-row .ctype { color: var(--muted); font-size: 10px; white-space: nowrap; }
+  .s-row .badge { font-size: 8px; padding: 1px 4px; border-radius: 3px; font-weight: 700; }
+  .s-row .badge.pk { background: rgba(0,255,136,0.15); color: var(--green); }
+  .s-row .badge.fk { background: rgba(254,188,46,0.15); color: var(--amber); }
+  .s-row .badge.en { background: rgba(139,92,246,0.15); color: #a78bfa; }
+
+  .schema-bottom { display: flex; gap: 20px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
+  .schema-bottom .legend { display: flex; gap: 16px; font-size: 11px; color: var(--muted); align-items: center; }
+  .schema-bottom .legend .li { display: flex; align-items: center; gap: 5px; }
+  .schema-bottom .legend .li .d { width: 8px; height: 8px; border-radius: 50%; }
+
+  .enum-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 20px; }
+  .enum-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .enum-card .ename { font-family: var(--mono); font-size: 12px; color: #a78bfa; margin-bottom: 6px; }
+  .enum-card .evals { font-size: 11px; color: var(--muted); line-height: 1.8; }
+</style>
+
+    <div class="schema-canvas-wrap">
+      <div class="schema-canvas" id="schema-canvas">
+        <svg id="schema-lines"></svg>
+
+        <!-- EVENTOS -->
+        <div class="s-table" id="t-eventos" style="left:1680px;top:60px;" data-table="eventos">
+          <div class="s-table-hdr"><span class="ico">📅</span><span class="name">eventos</span></div>
+          <div class="s-row"><span class="dot pk"></span><span class="badge pk">PK</span><span class="cname">id</span><span class="ctype">int8</span></div>
+          <div class="s-row"><span class="dot col"></span><span class="cname">nome</span><span class="ctype">text</span></div>
+          <div class="s-row"><span class="dot col"></span><span class="cname">descricao</span><span class="ctype">text</span></div>
+        </div>
+
+        <!-- DIAS -->
+        <div class="s-table" id="t-dias" style="left:1100px;top:20px;" data-table="dias">
+          <div class="s-table-hdr"><span class="ico">📆</span><span class="name">dias</span></div>
+          <div class="s-row"><span class="dot pk"></span><span class="badge pk">PK</span><span class="cname">id</span><span class="ctype">int8</span></div>
+          <div class="s-row" data-fk="eventos"><span class="dot fk"></span><span class="badge fk">FK</span><span class="cname">id_evento</span><span class="ctype">int8</span></div>
+          <div class="s-row"><span class="dot col"></span><span class="cname">data_dia</span><span class="ctype">date</span></div>
+        </div>
+
+        <!-- PALCOS -->
+        <div class="s-table" id="t-palcos" style="left:1100px;top:200px;" data-table="palcos">
+          <div class="s-table-hdr"><span class="ico">🎤</span><span class="name">palcos</span></div>
+          <div class="s-row"><span class="dot pk"></span><span class="badge pk">PK</span><span class="cname">id</span><span class="ctype">int8</span></div>
+          <div class="s-row"><span class="dot col"></span><span class="cname">nome</span><span class="ctype">text</span></div>
+          <div class="s-row"><span class="dot col"></span><span class="cname">capacidade</span><span class="ctype">int4</span></div>
+        </div>
+
+        <!-- ARTISTAS -->
+        <div class="s-table" id="t-artistas" style="left:1100px;top:380px;" data-table="artistas">
+          <div class="s-table-hdr"><span class="ico">🎵</span><span class="name">artistas</span></div>
+          <div class="s-row"><span class="dot pk"></span><span class="badge pk">PK</span><span class="cname">id</span><span class="ctype">int8</span></div>
+          <div class="s-row"><span class="dot col"></span><span class="cname">nome</span><span class="ctype">text</span></div>
+          <div class="s-row"><span class="dot col"></span><span class="cname">genero</span><span class="ctype">text</span></div>
+        </div>
+
+        <!-- CONCERTOS -->
+        <div class="s-table" id="t-concertos" style="left:680px;top:40px;" data-table="concertos">
+          <div class="s-table-hdr"><span class="ico">🎶</span><span class="name">concertos</span></div>
+          <div class="s-row"><span class="dot pk"></span><span class="badge pk">PK</span><span class="cname">id</span><span class="ctype">int8</span></div>
+          <div class="s-row" data-fk="dias"><span class="dot fk"></span><span class="badge fk">FK</span><span class="cname">id_dia</span><span class="ctype">int8</span></div>
+          <div class="s-row" data-fk="artistas"><span class="dot fk"></span><span class="badge fk">FK</span><span class="cname">id_artista</span><span class="ctype">int8</span></div>
+          <div class="s-row" data-fk="palcos"><span class="dot fk"></span><span class="badge fk">FK</span><span class="cname">id_palco</span><span class="ctype">int8</span></div>
+          <div class="s-row"><span class="dot col"></span><span class="cname">hora_inicio</span><span class="ctype">time</span></div>
+          <div class="s-row"><span class="dot enum"></span><span class="badge en">ENUM</span><span class="cname">estado</span><span class="ctype">estado_concerto</span></div>
+        </div>
+
+        <!-- CLIENTES -->
+        <div class="s-table" id="t-clientes" style="left:1100px;top:560px;" data-table="clientes">
+          <div class="s-table-hdr"><span class="ico">👤</span><span class="name">clientes</span></div>
+          <div class="s-row"><span class="dot pk"></span><span class="badge pk">PK</span><span class="cname">id</span><span class="ctype">int8</span></div>
+          <div class="s-row"><span class="dot col"></span><span class="cname">nome</span><span class="ctype">text</span></div>
+          <div class="s-row"><span class="dot col"></span><span class="cname">email</span><span class="ctype">text</span></div>
+          <div class="s-row"><span class="dot col"></span><span class="cname">nif</span><span class="ctype">varchar</span></div>
+        </div>
+
+        <!-- TIPOS_BILHETE -->
+        <div class="s-table" id="t-tipos_bilhete" style="left:1100px;top:780px;" data-table="tipos_bilhete">
+          <div class="s-table-hdr"><span class="ico">🏷️</span><span class="name">tipos_bilhete</span></div>
+          <div class="s-row"><span class="dot pk"></span><span class="badge pk">PK</span><span class="cname">id</span><span class="ctype">int8</span></div>
+          <div class="s-row" data-fk="eventos"><span class="dot fk"></span><span class="badge fk">FK</span><span class="cname">id_evento</span><span class="ctype">int8</span></div>
+          <div class="s-row"><span class="dot col"></span><span class="cname">nome</span><span class="ctype">text</span></div>
+          <div class="s-row"><span class="dot col"></span><span class="cname">preco</span><span class="ctype">numeric</span></div>
+        </div>
+
+        <!-- BILHETES -->
+        <div class="s-table" id="t-bilhetes" style="left:680px;top:400px;" data-table="bilhetes">
+          <div class="s-table-hdr"><span class="ico">🎫</span><span class="name">bilhetes</span></div>
+          <div class="s-row"><span class="dot pk"></span><span class="badge pk">PK</span><span class="cname">id</span><span class="ctype">int8</span></div>
+          <div class="s-row" data-fk="clientes"><span class="dot fk"></span><span class="badge fk">FK</span><span class="cname">id_cliente</span><span class="ctype">int8</span></div>
+          <div class="s-row" data-fk="tipos_bilhete"><span class="dot fk"></span><span class="badge fk">FK</span><span class="cname">id_tipo_bilhete</span><span class="ctype">int8</span></div>
+          <div class="s-row"><span class="dot col"></span><span class="cname">rfid</span><span class="ctype">varchar</span></div>
+          <div class="s-row"><span class="dot enum"></span><span class="badge en">ENUM</span><span class="cname">estado</span><span class="ctype">estado_bilhete</span></div>
+          <div class="s-row"><span class="dot col"></span><span class="cname">saldo_cashless</span><span class="ctype">numeric</span></div>
+        </div>
+
+        <!-- PORTAS -->
+        <div class="s-table" id="t-portas" style="left:680px;top:720px;" data-table="portas">
+          <div class="s-table-hdr"><span class="ico">🚪</span><span class="name">portas</span></div>
+          <div class="s-row"><span class="dot pk"></span><span class="badge pk">PK</span><span class="cname">id</span><span class="ctype">int8</span></div>
+          <div class="s-row"><span class="dot col"></span><span class="cname">nome_porta</span><span class="ctype">text</span></div>
+          <div class="s-row"><span class="dot col"></span><span class="cname">tipo_acesso</span><span class="ctype">text</span></div>
+        </div>
+
+        <!-- VALIDACOES -->
+        <div class="s-table" id="t-validacoes" style="left:240px;top:550px;" data-table="validacoes">
+          <div class="s-table-hdr"><span class="ico">✅</span><span class="name">validacoes</span></div>
+          <div class="s-row"><span class="dot pk"></span><span class="badge pk">PK</span><span class="cname">id</span><span class="ctype">int8</span></div>
+          <div class="s-row" data-fk="bilhetes"><span class="dot fk"></span><span class="badge fk">FK</span><span class="cname">id_bilhete</span><span class="ctype">int8</span></div>
+          <div class="s-row" data-fk="portas"><span class="dot fk"></span><span class="badge fk">FK</span><span class="cname">id_porta</span><span class="ctype">int8</span></div>
+          <div class="s-row"><span class="dot col"></span><span class="cname">horario</span><span class="ctype">timestamptz</span></div>
+          <div class="s-row"><span class="dot enum"></span><span class="badge en">ENUM</span><span class="cname">direcao</span><span class="ctype">direcao_movimento</span></div>
+        </div>
+
+        <!-- PONTOS_VENDA -->
+        <div class="s-table" id="t-pontos_venda" style="left:680px;top:920px;" data-table="pontos_venda">
+          <div class="s-table-hdr"><span class="ico">🏪</span><span class="name">pontos_venda</span></div>
+          <div class="s-row"><span class="dot pk"></span><span class="badge pk">PK</span><span class="cname">id</span><span class="ctype">int8</span></div>
+          <div class="s-row"><span class="dot col"></span><span class="cname">nome</span><span class="ctype">text</span></div>
+          <div class="s-row"><span class="dot enum"></span><span class="badge en">ENUM</span><span class="cname">tipo</span><span class="ctype">tipo_ponto_venda</span></div>
+        </div>
+
+        <!-- TRANSACOES -->
+        <div class="s-table" id="t-transacoes" style="left:240px;top:800px;" data-table="transacoes">
+          <div class="s-table-hdr"><span class="ico">💳</span><span class="name">transacoes</span></div>
+          <div class="s-row"><span class="dot pk"></span><span class="badge pk">PK</span><span class="cname">id</span><span class="ctype">int8</span></div>
+          <div class="s-row" data-fk="bilhetes"><span class="dot fk"></span><span class="badge fk">FK</span><span class="cname">id_bilhete</span><span class="ctype">int8</span></div>
+          <div class="s-row" data-fk="pontos_venda"><span class="dot fk"></span><span class="badge fk">FK</span><span class="cname">id_ponto_venda</span><span class="ctype">int8</span></div>
+          <div class="s-row"><span class="dot col"></span><span class="cname">valor</span><span class="ctype">numeric</span></div>
+          <div class="s-row"><span class="dot col"></span><span class="cname">data_hora</span><span class="ctype">timestamptz</span></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Legenda + Enums -->
+    <div class="schema-bottom">
+      <div class="legend">
+        <div class="li"><div class="d" style="background:var(--green)"></div> PK</div>
+        <div class="li"><div class="d" style="background:var(--amber)"></div> FK</div>
+        <div class="li"><div class="d" style="background:#a78bfa"></div> ENUM</div>
+        <div class="li"><div class="d" style="background:var(--muted)"></div> Coluna</div>
+        <div class="li" style="color:var(--amber)">— Relação FK</div>
+      </div>
+    </div>
+
+    <div class="enum-cards">
+      <div class="enum-card"><div class="ename">estado_bilhete</div><div class="evals">Ativo · Cancelado · Utilizado · Reembolsado</div></div>
+      <div class="enum-card"><div class="ename">estado_concerto</div><div class="evals">Confirmado · A decorrer · Terminado · Cancelado</div></div>
+      <div class="enum-card"><div class="ename">direcao_movimento</div><div class="evals">Entrada · Saída</div></div>
+      <div class="enum-card"><div class="ename">tipo_ponto_venda</div><div class="evals">Bar · Comida · Merchandising · Carregamento</div></div>
+    </div>
+
+  </section>
+
+  <script>
+  // ── SCHEMA DRAG & LINES ─────────────────────────────────────────
+  (function() {
+    const canvas = document.getElementById('schema-canvas');
+    const svg = document.getElementById('schema-lines');
+    const tables = canvas.querySelectorAll('.s-table');
+
+    // Drag logic
+    let dragging = null, offX = 0, offY = 0;
+
+    tables.forEach(t => {
+      t.addEventListener('mousedown', e => {
+        if (e.target.closest('a, button, input')) return;
+        dragging = t;
+        const r = t.getBoundingClientRect();
+        const cr = canvas.getBoundingClientRect();
+        offX = e.clientX - r.left;
+        offY = e.clientY - r.top;
+        t.style.zIndex = 10;
+        e.preventDefault();
+      });
+    });
+
+    document.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      const cr = canvas.getBoundingClientRect();
+      const wrap = canvas.parentElement;
+      let x = e.clientX - cr.left + wrap.scrollLeft - offX;
+      let y = e.clientY - cr.top + wrap.scrollTop - offY;
+      x = Math.max(0, Math.min(x, canvas.offsetWidth - dragging.offsetWidth));
+      y = Math.max(0, Math.min(y, canvas.offsetHeight - dragging.offsetHeight));
+      dragging.style.left = x + 'px';
+      dragging.style.top = y + 'px';
+      drawLines();
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (dragging) dragging.style.zIndex = 2;
+      dragging = null;
+    });
+
+    // Draw relationship lines
+    function drawLines() {
+      svg.innerHTML = '';
+      const cr = canvas.getBoundingClientRect();
+
+      tables.forEach(t => {
+        const fkRows = t.querySelectorAll('[data-fk]');
+        fkRows.forEach(row => {
+          const targetName = row.getAttribute('data-fk');
+          const target = canvas.querySelector(`[data-table="${targetName}"]`);
+          if (!target) return;
+
+          // Source: right edge of FK row
+          const rowRect = row.getBoundingClientRect();
+          const tRect = t.getBoundingClientRect();
+          const targetRect = target.getBoundingClientRect();
+
+          // Determine which sides to connect
+          const tCx = tRect.left + tRect.width / 2;
+          const targetCx = targetRect.left + targetRect.width / 2;
+
+          let x1, y1, x2, y2;
+
+          if (tCx < targetCx) {
+            // Source is left, connect right side of source to left side of target
+            x1 = tRect.right - cr.left;
+            y1 = rowRect.top + rowRect.height / 2 - cr.top;
+            x2 = targetRect.left - cr.left;
+            y2 = targetRect.top + 18 - cr.top; // header center
+          } else {
+            // Source is right, connect left side of source to right side of target
+            x1 = tRect.left - cr.left;
+            y1 = rowRect.top + rowRect.height / 2 - cr.top;
+            x2 = targetRect.right - cr.left;
+            y2 = targetRect.top + 18 - cr.top;
+          }
+
+          // Draw a smooth cubic bezier
+          const midX = (x1 + x2) / 2;
+          const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          path.setAttribute('d', `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`);
+          path.setAttribute('fill', 'none');
+          path.setAttribute('stroke', 'rgba(254,188,46,0.3)');
+          path.setAttribute('stroke-width', '2');
+          svg.appendChild(path);
+
+          // Dots at endpoints
+          [{ cx: x1, cy: y1 }, { cx: x2, cy: y2 }].forEach(p => {
+            const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            c.setAttribute('cx', p.cx);
+            c.setAttribute('cy', p.cy);
+            c.setAttribute('r', '4');
+            c.setAttribute('fill', 'var(--amber)');
+            svg.appendChild(c);
+          });
+        });
+      });
+    }
+
+    // Initial draw
+    setTimeout(drawLines, 100);
+    window.addEventListener('resize', drawLines);
+  })();
+  </script>
+
   <!-- SIMULADOR DE CRISE -->
   <section id="crise">
     <p class="section-label">Solução de Crise — Pulseira Offline vs Reembolso</p>
@@ -1755,35 +2041,43 @@
       <div class="crise-panel">
         <h3>SCAN DE PULSEIRA</h3>
 
-        <div class="demo-label">Pulseiras de demonstração:</div>
 <style>
-.demo-scroll-list { display: flex; overflow-x: auto; gap: 8px; margin-bottom: 12px; padding-bottom: 8px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.2) transparent; }
-.demo-scroll-list::-webkit-scrollbar { height: 6px; }
-.demo-scroll-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
-.demo-scroll-list .ticket-chip { flex: 0 0 auto; margin-right: 0; padding: 4px 10px; font-size: 11px; }
-.demo-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 11px; color: var(--muted); margin-bottom: 24px; }
+.scan-layout { display: grid; grid-template-columns: 200px 1fr; gap: 20px; }
+.rfid-sidebar { display: flex; flex-direction: column; gap: 6px; max-height: 340px; overflow-y: auto; padding-right: 8px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.2) transparent; }
+.rfid-sidebar::-webkit-scrollbar { width: 5px; }
+.rfid-sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+.rfid-sidebar .ticket-chip { margin-right: 0; width: 100%; box-sizing: border-box; padding: 5px 10px; font-size: 11px; justify-content: flex-start; }
+.rfid-sidebar-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 6px; }
+.scan-controls { display: flex; flex-direction: column; }
+.demo-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 11px; color: var(--muted); margin-top: 10px; }
 .legend-item { display: flex; align-items: center; gap: 6px; }
 </style>
-        <div class="demo-scroll-list" id="demo-table-container">
-          <!-- Filled by JS -->
-        </div>
-        <div class="demo-legend">
-          <div class="legend-item"><div class="chip-status green"></div> Válido</div>
-          <div class="legend-item"><div class="chip-status amber"></div> Usado</div>
-          <div class="legend-item"><div class="chip-status red"></div> Reemb.</div>
-          <div class="legend-item"><div class="chip-status amber" style="background:transparent;border:2px solid var(--amber)"></div> Canc.</div>
-        </div>
-
-        <div class="rfid-input-label">CÓDIGO RFID DA PULSEIRA</div>
-        <div class="rfid-input-wrap">
-          <input class="rfid-input" id="rfid-field" type="text" placeholder="ex: RFID-VALID-001" maxlength="40" />
-        </div>
-        <button class="scan-btn" onclick="simularScan()">⬡ &nbsp;PICAR PULSEIRA</button>
-
-        <div class="scan-result" id="scan-result">
+        <div class="scan-layout">
           <div>
-            <div class="result-icon" style="color:var(--muted)">📡</div>
-            <div>Aguarda scan...</div>
+            <div class="rfid-sidebar-label">Bilhetes na BD:</div>
+            <div class="rfid-sidebar" id="demo-table-container">
+              <!-- Filled by JS -->
+            </div>
+            <div class="demo-legend">
+              <div class="legend-item"><div class="chip-status green"></div> Válido</div>
+              <div class="legend-item"><div class="chip-status amber"></div> Usado</div>
+              <div class="legend-item"><div class="chip-status red"></div> Reemb.</div>
+              <div class="legend-item"><div class="chip-status amber" style="background:transparent;border:2px solid var(--amber)"></div> Canc.</div>
+            </div>
+          </div>
+          <div class="scan-controls">
+            <div class="rfid-input-label">CÓDIGO RFID DA PULSEIRA</div>
+            <div class="rfid-input-wrap">
+              <input class="rfid-input" id="rfid-field" type="text" placeholder="ex: RFID-VALID-001" maxlength="40" />
+            </div>
+            <button class="scan-btn" onclick="simularScan()">⬡ &nbsp;PICAR PULSEIRA</button>
+
+            <div class="scan-result" id="scan-result">
+              <div>
+                <div class="result-icon" style="color:var(--muted)">📡</div>
+                <div>Aguarda scan...</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
